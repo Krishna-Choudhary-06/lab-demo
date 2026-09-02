@@ -6,9 +6,9 @@ import (
 )
 
 type Node struct {
-	ID           string
-	Address      string
-	OutgoingConn net.Conn
+	ID          string
+	Address     string
+	PeerManager *PeerManager
 }
 
 func (n *Node) Start() error {
@@ -16,6 +16,8 @@ func (n *Node) Start() error {
 	if err != nil {
 		return err
 	}
+
+	n.PeerManager = NewPeerManager()
 
 	fmt.Println("Node", n.ID, "started")
 
@@ -26,7 +28,7 @@ func (n *Node) Start() error {
 			conn, err := listener.Accept()
 			if err != nil {
 				fmt.Println("Accept error:", err)
-				return
+				continue
 			}
 
 			go n.handleConnection(conn)
@@ -42,33 +44,44 @@ func (n *Node) Connect(address string) error {
 		return err
 	}
 
-	fmt.Println("Node", n.ID, "connected to", address)
+	peer := &Peer{
+		Address:   address,
+		Conn:      conn,
+		Connected: true,
+	}
 
-	n.OutgoingConn = conn
+	n.PeerManager.AddPeer(peer)
+
+	fmt.Println("Node", n.ID, "connected to", address)
 
 	return nil
 }
 
-func (n *Node) SendMessage(conn net.Conn, message string) error {
-	_, err := conn.Write([]byte(message))
-	return err
+func (n *Node) SendMessage(conn net.Conn, message Message) error {
+	return SendMessage(conn, message)
 }
 
 func (n *Node) handleConnection(conn net.Conn) {
-	defer conn.Close()
-
-	buffer := make([]byte, 1024)
-
-	for {
-		bytesRead, err := conn.Read(buffer)
-
-		if err != nil {
-			fmt.Println("Peer disconnected:", conn.RemoteAddr())
-			return
-		}
-
-		message := string(buffer[:bytesRead])
-
-		fmt.Println("Message received:", message)
+	peer := &Peer{
+		Address:   conn.RemoteAddr().String(),
+		Conn:      conn,
+		Connected: true,
 	}
+
+	n.PeerManager.AddPeer(peer)
+
+	fmt.Println("Incoming connection from:", peer.Address)
+
+	ReceiveMessages(conn, func(message Message) {
+		fmt.Println("Message received:")
+		fmt.Println("  Type:", message.Type)
+		fmt.Println("  Sender:", message.SenderID)
+		fmt.Println("  Payload:", message.Payload)
+	})
+
+	fmt.Println("Peer disconnected:", peer.Address)
+
+	n.PeerManager.RemovePeer(peer.Address)
+
+	conn.Close()
 }

@@ -1,12 +1,10 @@
 package network
 
-import (
-	"fmt"
-	"net"
-)
+import "net"
 
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-
-	fmt.Println("Peer connected:", conn.RemoteAddr())
+type Peer struct {
+	ID        string
+	Address   string
+	Conn      net.Conn
+	Connected bool
 }
